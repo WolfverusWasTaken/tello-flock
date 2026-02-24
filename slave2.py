@@ -11,7 +11,7 @@ Listens for UDP commands from master on PORT and executes:
 Sends ACK|<msg_id>|<NAME> back to master after handling each command.
 """
 
-import socket, threading, time, math
+import socket, threading, time
 from djitellopy import Tello
 
 # ================== USER CONFIG ==================
@@ -25,7 +25,7 @@ TAKEOFF_UP_CM = 120
 V_CM_S        = 20
 HZ            = 20
 STRAIGHT_CM   = 300
-RADIUS_CM     = 150
+YAW_DEG_S     = 50   # degrees/second for in-place 180° turn
 
 LOGFILE = "slave2_log.txt"
 # =================================================
@@ -54,14 +54,11 @@ def smooth_straight(tello: Tello, distance_cm, v_cm_s=20, hz=20):
     duration = float(distance_cm) / float(v)
     rc_hold(tello, lr=0, fb=v, ud=0, yaw=0, duration_s=duration, hz=hz)
 
-def smooth_semicircle(tello: Tello, radius_cm, v_cm_s=20, cw=True, hz=20):
-    v = float(clamp(v_cm_s, 10, 60))
-    R = float(radius_cm)
-    yaw_deg_s = (v / R) * (180.0 / math.pi)
-    yaw_cmd = int(round(clamp(yaw_deg_s, 5, 100)))
+def turn_180(tello: Tello, yaw_deg_s=50, cw=True, hz=20):
+    yaw_cmd = int(clamp(yaw_deg_s, 5, 100))
     yaw = yaw_cmd if cw else -yaw_cmd
-    duration = (math.pi * R) / v
-    rc_hold(tello, lr=0, fb=int(round(v)), ud=0, yaw=yaw, duration_s=duration, hz=hz)
+    duration = 180.0 / yaw_deg_s
+    rc_hold(tello, lr=0, fb=0, ud=0, yaw=yaw, duration_s=duration, hz=hz)
 
 def main():
     tello = Tello()
@@ -120,25 +117,20 @@ def main():
                 busy.release()
                 released = True
 
-                # Autonomous flight: straight → lap → straight → lap
+                # Autonomous flight: forward → 180° turn → return
                 log(f"{NAME} AUTO: forward {STRAIGHT_CM}cm")
                 print(f"[{NAME}] AUTO: moving forward {STRAIGHT_CM}cm...")
                 smooth_straight(tello, STRAIGHT_CM, V_CM_S, HZ)
                 tello.send_rc_control(0, 0, 0, 0)
                 if not stop_event.is_set():
-                    log(f"{NAME} AUTO: lap 1 (R={RADIUS_CM}cm)")
-                    print(f"[{NAME}] AUTO: lap 1...")
-                    smooth_semicircle(tello, RADIUS_CM, V_CM_S, cw=True, hz=HZ)
+                    log(f"{NAME} AUTO: 180 turn")
+                    print(f"[{NAME}] AUTO: 180 turn...")
+                    turn_180(tello, YAW_DEG_S, cw=True, hz=HZ)
                     tello.send_rc_control(0, 0, 0, 0)
                 if not stop_event.is_set():
-                    log(f"{NAME} AUTO: forward {STRAIGHT_CM}cm (return)")
-                    print(f"[{NAME}] AUTO: forward return...")
+                    log(f"{NAME} AUTO: return {STRAIGHT_CM}cm")
+                    print(f"[{NAME}] AUTO: returning...")
                     smooth_straight(tello, STRAIGHT_CM, V_CM_S, HZ)
-                    tello.send_rc_control(0, 0, 0, 0)
-                if not stop_event.is_set():
-                    log(f"{NAME} AUTO: lap 2 (R={RADIUS_CM}cm)")
-                    print(f"[{NAME}] AUTO: lap 2...")
-                    smooth_semicircle(tello, RADIUS_CM, V_CM_S, cw=True, hz=HZ)
                     tello.send_rc_control(0, 0, 0, 0)
                 log(f"{NAME} AUTO: sequence complete – hovering")
                 print(f"[{NAME}] AUTO: done – hovering")
