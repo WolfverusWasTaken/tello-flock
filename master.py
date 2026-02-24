@@ -2,6 +2,10 @@
 import socket, threading, time, sys, termios, tty, select, math
 from djitellopy import Tello
 
+def log(msg):
+    with open('master_log.txt', 'w') as f:
+        f.write(str(msg) + '\n')
+
 # =============== ETHERNET SYNC CONFIG ===============
 MASTER_IP = "192.168.50.1"
 PORT = 5005
