@@ -51,28 +51,8 @@ def rc_hold(tello: Tello, lr, fb, ud, yaw, duration_s, hz=20):
 
 def smooth_straight(tello: Tello, distance_cm, v_cm_s=20, hz=20):
     v = int(clamp(v_cm_s, 10, 60))
-    # Use IMU-based distance calculation
-    try:
-        tello.send_rc_control(0, 0, 0, 0)
-        time.sleep(0.1)
-        start_pos = tello.get_acceleration_x()
-    except Exception:
-        start_pos = None
-    moved = 0
-    t_start = time.time()
-    while moved < distance_cm:
-        tello.send_rc_control(0, v, 0, 0)
-        time.sleep(1.0 / hz)
-        try:
-            acc_x = tello.get_acceleration_x()
-            # This is a placeholder for actual IMU integration logic
-            # In practice, you would integrate acceleration to estimate distance
-            # Here, we just increment moved as a stub
-            moved += abs(v) * (1.0 / hz)  # fallback: estimate by speed*time
-        except Exception:
-            moved += abs(v) * (1.0 / hz)
-    tello.send_rc_control(0, 0, 0, 0)
-    time.sleep(0.15)
+    duration = float(distance_cm) / float(v)
+    rc_hold(tello, lr=0, fb=v, ud=0, yaw=0, duration_s=duration, hz=hz)
 
 def turn_180(tello: Tello, yaw_deg_s=50, cw=True, hz=20):
     yaw_cmd = int(clamp(yaw_deg_s, 5, 100))
