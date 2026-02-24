@@ -35,13 +35,15 @@ def log(msg: str):
     with open(LOGFILE, "a") as f:
         f.write(f"[{ts}] {msg}\n")
 
+stop_event = threading.Event()
+
 def clamp(x, lo, hi):
     return lo if x < lo else hi if x > hi else x
 
 def rc_hold(tello: Tello, lr, fb, ud, yaw, duration_s, hz=20):
     period = 1.0 / hz
     t_end = time.time() + duration_s
-    while time.time() < t_end:
+    while time.time() < t_end and not stop_event.is_set():
         tello.send_rc_control(lr, fb, ud, yaw)
         time.sleep(period)
     tello.send_rc_control(0, 0, 0, 0)
@@ -99,8 +101,10 @@ def main():
             log(f"{NAME} Busy -> dropping {cmd} id={msg_id}")
             return
 
+        released = False
         try:
             if cmd == "TAKEOFF":
+                stop_event.clear()
                 log(f"{NAME} TAKEOFF start")
                 print(f"[{NAME}] TAKEOFF...")
                 tello.takeoff()
@@ -110,24 +114,38 @@ def main():
                 time.sleep(0.3)
                 print(f"[{NAME}] TAKEOFF DONE -> ACK")
                 send_ack(msg_id)
+                # Release lock early so LAND/KILL can execute during autonomous flight
+                with seen_lock:
+                    completed_ids.add(msg_id)
+                busy.release()
+                released = True
 
-            elif cmd == "MOVE_FORWARD":
-                log(f"{NAME} MOVE_FORWARD {STRAIGHT_CM}cm")
-                print(f"[{NAME}] MOVE_FORWARD...")
+                # Autonomous flight: straight → lap → straight → lap
+                log(f"{NAME} AUTO: forward {STRAIGHT_CM}cm")
+                print(f"[{NAME}] AUTO: moving forward {STRAIGHT_CM}cm...")
                 smooth_straight(tello, STRAIGHT_CM, V_CM_S, HZ)
                 tello.send_rc_control(0, 0, 0, 0)
-                print(f"[{NAME}] MOVE_FORWARD DONE -> ACK")
-                send_ack(msg_id)
-
-            elif cmd == "LAP":
-                log(f"{NAME} LAP semicircle R={RADIUS_CM}")
-                print(f"[{NAME}] LAP (R={RADIUS_CM}cm)...")
-                smooth_semicircle(tello, RADIUS_CM, V_CM_S, cw=True, hz=HZ)
-                tello.send_rc_control(0, 0, 0, 0)
-                print(f"[{NAME}] LAP DONE -> ACK")
-                send_ack(msg_id)
+                if not stop_event.is_set():
+                    log(f"{NAME} AUTO: lap 1 (R={RADIUS_CM}cm)")
+                    print(f"[{NAME}] AUTO: lap 1...")
+                    smooth_semicircle(tello, RADIUS_CM, V_CM_S, cw=True, hz=HZ)
+                    tello.send_rc_control(0, 0, 0, 0)
+                if not stop_event.is_set():
+                    log(f"{NAME} AUTO: forward {STRAIGHT_CM}cm (return)")
+                    print(f"[{NAME}] AUTO: forward return...")
+                    smooth_straight(tello, STRAIGHT_CM, V_CM_S, HZ)
+                    tello.send_rc_control(0, 0, 0, 0)
+                if not stop_event.is_set():
+                    log(f"{NAME} AUTO: lap 2 (R={RADIUS_CM}cm)")
+                    print(f"[{NAME}] AUTO: lap 2...")
+                    smooth_semicircle(tello, RADIUS_CM, V_CM_S, cw=True, hz=HZ)
+                    tello.send_rc_control(0, 0, 0, 0)
+                log(f"{NAME} AUTO: sequence complete – hovering")
+                print(f"[{NAME}] AUTO: done – hovering")
 
             elif cmd == "LAND":
+                stop_event.set()
+                time.sleep(0.2)
                 log(f"{NAME} LAND")
                 print(f"[{NAME}] LAND...")
                 try:
@@ -139,6 +157,7 @@ def main():
                 send_ack(msg_id)
 
             elif cmd in ("EMERGENCY", "KILL"):
+                stop_event.set()
                 log(f"{NAME} !!! {cmd} !!!")
                 print(f"[{NAME}] !!! {cmd} !!!")
                 try:
@@ -149,20 +168,20 @@ def main():
                 send_ack(msg_id)
 
             else:
-                log(f"{NAME} Unknown command {cmd}")
-                print(f"[{NAME}] Unknown command: {cmd}")
-                send_ack(msg_id)
+                log(f"{NAME} Unknown/ignored command: {cmd}")
+                print(f"[{NAME}] Unknown/ignored: {cmd}")
 
         except Exception as e:
             log(f"{NAME} Error executing {cmd}: {e}")
             print(f"[{NAME}] Error executing {cmd}: {e}")
-            # Still ACK so master doesn't hang forever
-            send_ack(msg_id)
+            if not released:
+                send_ack(msg_id)
 
         finally:
-            with seen_lock:
-                completed_ids.add(msg_id)
-            busy.release()
+            if not released:
+                with seen_lock:
+                    completed_ids.add(msg_id)
+                busy.release()
 
     while True:
         try:

@@ -24,8 +24,6 @@ RADIUS_CM_MASTER = 120
 
 # ACK timeouts (seconds)
 ACK_TIMEOUT_TAKEOFF = 30
-ACK_TIMEOUT_MOVE    = 25
-ACK_TIMEOUT_TURN    = 35
 ACK_TIMEOUT_LAND    = 20
 
 LOGFILE = "master_log.txt"
@@ -263,29 +261,17 @@ def main():
         land_all(comm, tello)
         return
 
-    # STEP 3 — Straight
-    log("STEP 3: master straight, then slaves MOVE_FORWARD")
-    print("[MASTER] STEP 3: Master straight...")
+    # STEP 3 — Master flies autonomously (slaves do the same in parallel)
+    log("STEP 3: master straight")
+    print("[MASTER] STEP 3: Moving forward...")
     smooth_straight(tello, STRAIGHT_CM, V_CM_S, HZ)
-    time.sleep(1.0)
+    tello.send_rc_control(0, 0, 0, 0)
 
-    print("[MASTER] STEP 3b: Commanding slaves MOVE_FORWARD...")
-    if not comm.send_and_wait_ack("MOVE_FORWARD", SLAVES, timeout=ACK_TIMEOUT_MOVE):
-        print("[MASTER] MOVE_FORWARD ACK failed -> LAND_ALL")
-        land_all(comm, tello)
-        return
-
-    # STEP 4 — Turn (semicircle)
-    log("STEP 4: master semicircle, then slaves LAP")
-    print("[MASTER] STEP 4: Master turn...")
+    # STEP 4 — Master turn
+    log("STEP 4: master semicircle")
+    print("[MASTER] STEP 4: Turning...")
     smooth_semicircle(tello, RADIUS_CM_MASTER, V_CM_S, cw=True, hz=HZ)
-    time.sleep(1.0)
-
-    print("[MASTER] STEP 4b: Commanding slaves LAP...")
-    if not comm.send_and_wait_ack("LAP", SLAVES, timeout=ACK_TIMEOUT_TURN):
-        print("[MASTER] LAP ACK failed -> LAND_ALL")
-        land_all(comm, tello)
-        return
+    tello.send_rc_control(0, 0, 0, 0)
 
     # STEP 5 — Land all
     log("STEP 5: land all")
