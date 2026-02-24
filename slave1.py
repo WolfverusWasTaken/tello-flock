@@ -3,8 +3,8 @@ import socket, threading, time, math
 from djitellopy import Tello
 
 def log(msg):
-    with open('slave1_log.txt', 'w') as f:
-        f.write(str(msg) + '\n')
+    with open('slave1_log.txt', 'a') as f:
+        f.write('[INFO] ' + str(msg) + '\n')
 
 SELF_IP   = "192.168.50.3"
 MASTER_IP = "192.168.50.1"
