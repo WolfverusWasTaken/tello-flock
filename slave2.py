@@ -6,7 +6,7 @@ def log(msg):
     with open('slave2_log.txt', 'w') as f:
         f.write(str(msg) + '\n')
 
-SELF_IP   = "192.168.50.3"
+SELF_IP   = "192.168.50.2"
 MASTER_IP = "192.168.50.1"
 PORT = 5005
 NAME = "SLAVE_RIGHT"
