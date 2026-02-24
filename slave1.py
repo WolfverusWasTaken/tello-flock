@@ -55,10 +55,12 @@ def do_one_lap(tello: Tello):
 def main():
     tello = Tello()
     tello.connect()
+    log(f"{NAME} Connected. Battery={tello.get_battery()}%")
     print(f"[{NAME}] Connected. Battery={tello.get_battery()}%")
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind((SELF_IP, PORT))
+    log(f"{NAME} Listening {SELF_IP}:{PORT}")
     print(f"[{NAME}] Listening {SELF_IP}:{PORT}")
 
     busy = threading.Lock()
@@ -72,6 +74,7 @@ def main():
             return
         try:
             if cmd == "TAKEOFF":
+                log(f"{NAME} TAKEOFF")
                 print(f"[{NAME}] TAKEOFF")
                 tello.takeoff()
                 if TAKEOFF_UP_CM > 0:
@@ -81,27 +84,33 @@ def main():
                 send_ack(msg_id)  # TAKEOFF COMPLETE
 
             elif cmd == "RUN_LAP":
+                log(f"{NAME} RUN_LAP")
                 print(f"[{NAME}] RUN_LAP")
                 send_ack(msg_id)  # started
                 do_one_lap(tello)
 
             elif cmd == "LAND":
+                log(f"{NAME} LAND")
                 print(f"[{NAME}] LAND")
                 try:
                     tello.land()
                 except Exception as e:
+                    log(f"{NAME} land error: {e}")
                     print(f"[{NAME}] land error:", e)
                 send_ack(msg_id)
 
             elif cmd == "EMERGENCY":
+                log(f"{NAME} !!! EMERGENCY !!!")
                 print(f"[{NAME}] !!! EMERGENCY !!!")
                 try:
                     tello.emergency()
                 except Exception as e:
+                    log(f"{NAME} emergency error: {e}")
                     print(f"[{NAME}] emergency error:", e)
                 send_ack(msg_id)
 
             else:
+                log(f"{NAME} Unknown command: {cmd}")
                 send_ack(msg_id)
         finally:
             busy.release()

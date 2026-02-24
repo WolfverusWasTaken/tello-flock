@@ -3,8 +3,8 @@ import socket, threading, time, sys, termios, tty, select, math
 from djitellopy import Tello
 
 def log(msg):
-    with open('master_log.txt', 'w') as f:
-        f.write(str(msg) + '\n')
+    with open('master_log.txt', 'a') as f:
+        f.write('[INFO] ' + str(msg) + '\n')
 
 # =============== ETHERNET SYNC CONFIG ===============
 MASTER_IP = "192.168.50.1"
@@ -136,6 +136,7 @@ def main():
 
     tello = Tello()
     tello.connect()
+    log(f"MASTER Connected to Tello (wifi 192.168.10.1). Battery={tello.get_battery()}%")
     print(f"[MASTER] Connected to Tello (wifi 192.168.10.1). Battery={tello.get_battery()}%")
 
     stop_flag = {"stop": False}
@@ -150,18 +151,22 @@ def main():
                     continue
                 k = k.lower()
                 if k == "x":
+                    log("MASTER !!! EMERGENCY !!!")
                     print("[MASTER] !!! EMERGENCY !!!")
                     comm.broadcast("EMERGENCY", SLAVES)
                     try:
                         tello.emergency()
                     except Exception as e:
+                        log(f"MASTER local emergency error: {e}")
                         print("[MASTER] local emergency error:", e)
                 elif k == "l":
+                    log("MASTER LAND(all)")
                     print("[MASTER] LAND(all)")
                     comm.send_and_wait_ack("LAND", SLAVES)
                     try:
                         tello.land()
                     except Exception as e:
+                        log(f"MASTER local land error: {e}")
                         print("[MASTER] local land error:", e)
                 elif k == "q":
                     stop_flag["stop"] = True
@@ -172,6 +177,7 @@ def main():
     input("[MASTER] Press ENTER to start: MASTER takeoff -> SLAVES takeoff -> 1 lap -> land...")
 
     # 1) MASTER takeoff first
+    log("MASTER Taking off...")
     print("[MASTER] Taking off...")
     tello.takeoff()
     if TAKEOFF_UP_CM > 0:
@@ -180,35 +186,44 @@ def main():
     time.sleep(0.3)
 
     # 2) Ask SLAVES to takeoff, wait for TAKEOFF COMPLETE ACKs
+    log("MASTER Commanding slaves TAKEOFF, waiting for completion...")
     print("[MASTER] Commanding slaves TAKEOFF, waiting for completion...")
     if not comm.send_and_wait_ack("TAKEOFF", SLAVES):
+        log("MASTER Slave takeoff failed -> LAND(all)")
         print("[MASTER] Slave takeoff failed -> LAND(all)")
         comm.send_and_wait_ack("LAND", SLAVES)
         try:
             tello.land()
-        except:
+        except Exception as e:
+            log(f"MASTER land error: {e}")
             pass
         return
 
     # 3) Start lap together
+    log("MASTER Slaves confirmed airborne. Starting lap...")
     print("[MASTER] Slaves confirmed airborne. Starting lap...")
     if not comm.send_and_wait_ack("RUN_LAP", SLAVES):
+        log("MASTER RUN_LAP sync failed -> EMERGENCY")
         print("[MASTER] RUN_LAP sync failed -> EMERGENCY")
         comm.broadcast("EMERGENCY", SLAVES)
         try:
             tello.emergency()
-        except:
+        except Exception as e:
+            log(f"MASTER emergency error: {e}")
             pass
         return
 
+    log("MASTER Running lap...")
     do_one_lap(tello, RADIUS_CM_MASTER, STRAIGHT_CM, V_CM_S, HZ)
 
     # 4) Land together
+    log("MASTER Lap done. LAND(all)")
     print("[MASTER] Lap done. LAND(all)")
     comm.send_and_wait_ack("LAND", SLAVES)
     tello.land()
 
     stop_flag["stop"] = True
+    log("MASTER Done.")
     print("[MASTER] Done.")
 
 if __name__ == "__main__":
