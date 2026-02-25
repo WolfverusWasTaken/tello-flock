@@ -173,6 +173,7 @@ def rc_hold(tello: Tello, lr, fb, ud, yaw, duration_s, hz=20):
 
 def smooth_straight(tello: Tello, distance_cm, v_cm_s=20, hz=20):
     v = int(clamp(v_cm_s, 10, 60))
+    distance_cm = 300
     duration = float(distance_cm) / float(v)
     rc_hold(tello, lr=0, fb=v, ud=0, yaw=0, duration_s=duration, hz=hz)
 
